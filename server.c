@@ -80,6 +80,8 @@ int main(){
   return 0;
 }
 
+// COMMUNICATION
+
 void sendString(int client_fd, char *msg){
   write(client_fd, msg, 1 + strlen(msg));
 }
@@ -99,6 +101,8 @@ char *receiveString(int client_fd){
 
   return string;
 }
+
+// MENU
 
 void mainMenu(int client_fd){
   int selection = -1;
@@ -243,6 +247,8 @@ bool checkDuplicateUsername(char *username) {
     fclose(file);
     return false;
 }
+
+// FICHEIROS
 
 void create_user(char *username, char *password){
   FILE *file = fopen("users.bin", "ab");
