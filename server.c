@@ -12,7 +12,7 @@
 
 #define SERVER_PORT 9000
 #define BUF_SIZE 1024
-#define MAX_USERS 20
+#define MAX_USERS 50
 
 typedef int bool;
 #define true 1
@@ -21,23 +21,26 @@ typedef int bool;
 typedef struct {
     char username[20];
     char password[20];
+    int PORT;
 } User;
 
 void erro(char *msg);
 int serverSetup();
-
+// COMMUNICATION
 void sendString(int client_fd, char *msg);
 char *receiveString(int client_fd);
-
+// MENUS
 void mainMenu(int client_fd);
 void signupMenu(int client_fd);
 void loginMenu(int client_fd);
 void conversationsMenu(int client_fd, const User user);
-
+void privateCommunicationMenu(int client_fd, const User user);
+// FILES
+void createUsersFile();
+void seeUsers();
 void create_user(char *username, char *password);
 bool checkDuplicateUsername(char *username);
 bool checkCredentials(char *username, char *password);
-
 
 int main(){
   printf("\e[1;1H\e[2J");
@@ -67,6 +70,7 @@ int main(){
     // wait for new connection
     client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size);
     if (client > 0){
+      createUsersFile();
       if (fork() == 0){
         close(fd);
         printf("Connected with a client\n");
@@ -102,8 +106,6 @@ char *receiveString(int client_fd){
   return string;
 }
 
-// MENU
-
 void mainMenu(int client_fd){
   int selection = -1;
   while(selection != 3){
@@ -116,6 +118,7 @@ void mainMenu(int client_fd){
         continue;
       }
       if (selection == 2){
+        seeUsers();
         loginMenu(client_fd);
         selection = -1;
         continue;
@@ -202,13 +205,16 @@ void conversationsMenu(int client_fd, const User user){
   int selection = -1;
   while(selection != 3){
     char string[100];
-    snprintf(string, sizeof(string), "\nWELCOME %s\n1. Private\n2. Group\n3. Log out\n\nSelection: ", user.username);
+    snprintf(string, sizeof(string), "\nCONVERSATIONS MENU %s\n1. Private\n2. Group\n3. Log out\n\nSelection: ", user.username);
     sendString(client_fd, string);
     selection = atoi(receiveString(client_fd));
     if (selection == 1 || selection == 2 || selection == 3){
       if (selection == 1){
-        sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-        receiveString(client_fd);
+        privateCommunicationMenu(client_fd, user);
+        /*
+          sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
+          receiveString(client_fd);
+        */
         selection = -1;
       }
       if (selection == 2){
@@ -227,6 +233,60 @@ void conversationsMenu(int client_fd, const User user){
     }
   }
 }
+
+void privateCommunicationMenu(int client_fd, const User user){
+
+}
+
+// FILES
+
+
+void createUsersFile() {
+    FILE *file = fopen("users.bin", "r");
+    if (file == NULL) {
+        file = fopen("users.bin", "wb");
+        if (file == NULL) {
+            perror("Error creating file");
+            exit(1);
+        }
+
+        User initial_user;
+        strcpy(initial_user.username, "admin\n");
+        strcpy(initial_user.password, "admin\n");
+        initial_user.PORT = 9001;
+        fwrite(&initial_user, sizeof(User), 1, file);
+
+        fclose(file);
+    } else {
+        fclose(file);
+    }
+}
+
+void seeUsers() {
+    FILE *file = fopen("users.bin", "rb");
+    if (file == NULL) {
+        return;
+    }
+
+    User users[MAX_USERS];
+    size_t num_users = fread(users, sizeof(User), MAX_USERS, file);
+
+    for (size_t i = 0; i < num_users; i++) {
+        // Remove trailing newline character if it exists
+        size_t username_len = strlen(users[i].username);
+        size_t password_len = strlen(users[i].password);
+        if (username_len > 0 && users[i].username[username_len - 1] == '\n') {
+            users[i].username[username_len - 1] = '\0';
+        }
+        if (password_len > 0 && users[i].password[password_len - 1] == '\n') {
+            users[i].password[password_len - 1] = '\0';
+        }
+        printf("User %ld -> %s, %s, %d\n", i, users[i].username, users[i].password, users[i].PORT);
+    }
+
+    fclose(file);
+}
+
 
 bool checkDuplicateUsername(char *username) {
     FILE *file = fopen("users.bin", "rb");
@@ -251,27 +311,29 @@ bool checkDuplicateUsername(char *username) {
 // FICHEIROS
 
 void create_user(char *username, char *password){
-  FILE *file = fopen("users.bin", "ab");
-    if (file == NULL) {
-        file = fopen("users.bin", "wb");
-        if (file == NULL) {
-            erro("Creating file");
-            exit(0);
-        }
-        fclose(file);
-        printf("Created users.bin\n");
-        fflush(stdout);
-    }
+  FILE *file = fopen("users.bin", "ab+");
 
-    file = fopen("users.bin", "ab");
     if (file == NULL) {
       erro("Opening file");
       exit(0);
     }
 
+    User existing_users[MAX_USERS];
+    size_t num_users = fread(existing_users, sizeof(User), MAX_USERS, file);
+
+    int highest_port = 0;
+    for (size_t i = 0; i < num_users; i++) {
+        if (existing_users[i].PORT > highest_port) {
+            highest_port = existing_users[i].PORT;
+        }
+    }
+
+    int new_port = highest_port + 1;
+
     User user;
     strcpy(user.username, username);
     strcpy(user.password, password);
+    user.PORT = new_port;
 
     fwrite(&user, sizeof(User), 1, file);
 
