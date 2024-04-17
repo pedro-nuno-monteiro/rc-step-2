@@ -21,7 +21,7 @@ typedef int bool;
 typedef struct {
     char username[20];
     char password[20];
-    int PORT;
+    int port;
 } User;
 
 void erro(char *msg);
@@ -35,12 +35,14 @@ void signupMenu(int client_fd);
 void loginMenu(int client_fd);
 void conversationsMenu(int client_fd, const User user);
 void privateCommunicationMenu(int client_fd, const User user);
+User chooseAvailableUsers(int client_fd, const User user);
+void startConversation(int client_fd, const User user, const User conversa);
 // FILES
 void createUsersFile();
 void seeUsers();
 void create_user(char *username, char *password);
 bool checkDuplicateUsername(char *username);
-bool checkCredentials(char *username, char *password);
+int checkCredentials(char *username, char *password);
 
 int main(){
   printf("\e[1;1H\e[2J");
@@ -166,6 +168,7 @@ void signupMenu(int client_fd){
     }
   }
 }
+
 void loginMenu(int client_fd){
   bool leave_menu = false;
   while(!leave_menu){
@@ -180,12 +183,14 @@ void loginMenu(int client_fd){
         leave_menu = true;
       }
       else{
-        if(checkCredentials(username, password)){
+        int user_port = checkCredentials(username, password);
+        if(user_port != -1){
           sendString(client_fd, "\nLogged in successfully!!! (Press ENTER to continue...)\n");
           receiveString(client_fd);
           User user;
           strcpy(user.username, username);
           strcpy(user.password, password);
+          user.port = user_port;
           conversationsMenu(client_fd, user);
           leave_menu = true;
         }
@@ -205,16 +210,12 @@ void conversationsMenu(int client_fd, const User user){
   int selection = -1;
   while(selection != 3){
     char string[100];
-    snprintf(string, sizeof(string), "\nCONVERSATIONS MENU %s\n1. Private\n2. Group\n3. Log out\n\nSelection: ", user.username);
+    snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Log out\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
     sendString(client_fd, string);
     selection = atoi(receiveString(client_fd));
     if (selection == 1 || selection == 2 || selection == 3){
       if (selection == 1){
         privateCommunicationMenu(client_fd, user);
-        /*
-          sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-          receiveString(client_fd);
-        */
         selection = -1;
       }
       if (selection == 2){
@@ -235,12 +236,105 @@ void conversationsMenu(int client_fd, const User user){
 }
 
 void privateCommunicationMenu(int client_fd, const User user){
+  int selection = -1;
+  while(selection != 4){
+    char string[300];
+    snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE PRIVATE CONVERSATIONS MENU\n\n1. See ongoing conversations\n2. Start a new conversation\n3. Block users\n4. Exit Menu\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
+    sendString(client_fd, string);
+    selection = atoi(receiveString(client_fd));
+    if (selection == 1 || selection == 2 || selection == 3 || selection == 4){
+      if (selection == 1){ // Show ongoing conversations
+        sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
+        receiveString(client_fd);
+        selection = -1;
+      }
+      if (selection == 2){ // Start a new conversation
+        User conversa = chooseAvailableUsers(client_fd, user);
+        if(strcmp(conversa.username, "") != 0 && strcmp(conversa.password, "") != 0){ // Se não retornar nulo
+          //Começa a conversa
+          startConversation(client_fd, user, conversa);
+        }
+        selection = -1;
+      }
+      if (selection == 3){ // Block users -> será que não faz mais sentido ser no conversations menu?
+        sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
+        receiveString(client_fd);
+        selection = -1;
+      }
+      if (selection == 4){
+        sendString(client_fd, "\nReturning to Conversations Menu! (Press ENTER to continue...)\n");
+        receiveString(client_fd);
+      }
+    }
+    else {
+      sendString(client_fd, "\nINVALID SELECTION, please press 1, 2, 3 or! (Press ENTER to continue...)\n");
+      receiveString(client_fd);
+    }
+  }
+}
+
+User chooseAvailableUsers(int client_fd, const User user){
+  FILE *file = fopen("users.bin", "rb");
+    if (file == NULL) {
+        User nulo = { "", "", 0 };
+        return nulo;
+    }
+
+    User users[MAX_USERS];
+    User available_users[MAX_USERS];
+    size_t num_users = fread(users, sizeof(User), MAX_USERS, file);
+
+    fclose(file);
+
+    char choices_to_send[1000] = "";
+    int counter = 0;
+    char counter_str[5];
+
+  	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
+    for(size_t i = 0; i < num_users; i++){
+      // Check if the user is logged in
+      if(strcmp(users[i].username, user.username) != 0 /*&& user[i].logged_in && check if itself is not blocked by the user*/){ // If it isn't itself
+        available_users[counter] = users[i];
+        printf("available_users[counter] = %s", users[i].username);
+        counter++;
+        sprintf(counter_str, "%d", counter);
+        strcat(choices_to_send, counter_str);
+        strcat(choices_to_send, ". ");
+        strcat(choices_to_send, users[i].username);
+      }
+    }
+
+    counter++;
+    sprintf(counter_str, "%d", counter);
+    strcat(choices_to_send, counter_str);
+    strcat(choices_to_send, ". ");
+    strcat(choices_to_send, "Return to the PRIVATE CONVERSATIONS MENU\n\nSelection: ");
+    // Send the string to the user
+    // Receive the choice and return the user
+    int selection = -1; 
+    while(1){
+      sendString(client_fd, choices_to_send);
+      selection = atoi(receiveString(client_fd));
+
+      if(selection == counter){ // Exit
+        User nulo = { "", "", 0 }; 
+        return nulo; // retorna um user nulo
+      }
+      else if(selection >= 0 && selection < counter){
+        return available_users[selection - 1];
+      }
+    }
+
+    User nulo = { "", "", 0 };
+    return nulo;
 
 }
 
+void startConversation(int client_fd, const User user, const User conversa){
+  printf("\nA conversa vai começar com entre %.*s e %.*s no porto %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, user.port);
+}
+
 // FILES
-
-
 void createUsersFile() {
     FILE *file = fopen("users.bin", "r");
     if (file == NULL) {
@@ -253,7 +347,7 @@ void createUsersFile() {
         User initial_user;
         strcpy(initial_user.username, "admin\n");
         strcpy(initial_user.password, "admin\n");
-        initial_user.PORT = 9001;
+        initial_user.port = 9001;
         fwrite(&initial_user, sizeof(User), 1, file);
 
         fclose(file);
@@ -281,12 +375,11 @@ void seeUsers() {
         if (password_len > 0 && users[i].password[password_len - 1] == '\n') {
             users[i].password[password_len - 1] = '\0';
         }
-        printf("User %ld -> %s, %s, %d\n", i, users[i].username, users[i].password, users[i].PORT);
+        printf("User %ld -> %s, %s, %d\n", i, users[i].username, users[i].password, users[i].port);
     }
 
     fclose(file);
 }
-
 
 bool checkDuplicateUsername(char *username) {
     FILE *file = fopen("users.bin", "rb");
@@ -323,8 +416,8 @@ void create_user(char *username, char *password){
 
     int highest_port = 0;
     for (size_t i = 0; i < num_users; i++) {
-        if (existing_users[i].PORT > highest_port) {
-            highest_port = existing_users[i].PORT;
+        if (existing_users[i].port > highest_port) {
+            highest_port = existing_users[i].port;
         }
     }
 
@@ -333,14 +426,14 @@ void create_user(char *username, char *password){
     User user;
     strcpy(user.username, username);
     strcpy(user.password, password);
-    user.PORT = new_port;
+    user.port = new_port;
 
     fwrite(&user, sizeof(User), 1, file);
 
     fclose(file);
 }
 
-bool checkCredentials(char *username, char *password) {
+int checkCredentials(char *username, char *password) {
     FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         return false;
@@ -352,15 +445,15 @@ bool checkCredentials(char *username, char *password) {
     for (size_t i = 0; i < num_users; i++) {
         if (strcmp(users[i].username, username) == 0) {
             if(strcmp(users[i].password, password) == 0){
-              return true;
+              return users[i].port;
             }
             fclose(file);
-            return false;
+            return -1;
         }
     }
 
     fclose(file);
-    return false;
+    return -1;
 }
 
 void erro(char *msg){
