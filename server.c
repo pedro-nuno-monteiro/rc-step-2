@@ -26,9 +26,11 @@ typedef struct {
 
 void erro(char *msg);
 int serverSetup();
+
 // COMMUNICATION
 void sendString(int client_fd, char *msg);
 char *receiveString(int client_fd);
+
 // MENUS
 void mainMenu(int client_fd);
 void signupMenu(int client_fd);
@@ -37,6 +39,7 @@ void conversationsMenu(int client_fd, const User user);
 void privateCommunicationMenu(int client_fd, const User user);
 User chooseAvailableUsers(int client_fd, const User user);
 void startConversation(int client_fd, const User user, const User conversa);
+
 // FILES
 void createUsersFile();
 void seeUsers();
@@ -44,237 +47,251 @@ void create_user(char *username, char *password);
 bool checkDuplicateUsername(char *username);
 int checkCredentials(char *username, char *password);
 
-int main(){
-  printf("\e[1;1H\e[2J");
-  printf("ChatRC Main Server\n");
-  int fd, client;
-  struct sockaddr_in addr, client_addr;
-  int client_addr_size;
+int main() {
+	printf("\e[1;1H\e[2J");
+	printf("ChatRC Main Server\n");
+	int fd, client;
+	struct sockaddr_in addr, client_addr;
+	int client_addr_size;
 
-  bzero((void *)&addr, sizeof(addr));
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  addr.sin_port = htons(SERVER_PORT);
+	bzero((void *)&addr, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(SERVER_PORT);
 
-  if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    erro("na funcao socket");
-  if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    erro("na funcao bind");
-  if (listen(fd, 5) < 0)
-    erro("na funcao listen");
+	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		erro("na funcao socket");
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+		erro("na funcao bind");
+	if (listen(fd, 5) < 0)
+		erro("na funcao listen");
 
-  client_addr_size = sizeof(client_addr);
+	client_addr_size = sizeof(client_addr);
 
-  while (1){
-    // clean finished child processes, avoiding zombies
-    // must use WNOHANG or would block whenever a child process was working
-    while (waitpid(-1, NULL, WNOHANG) > 0);
-    // wait for new connection
-    client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size);
-    if (client > 0){
-      createUsersFile();
-      if (fork() == 0){
-        close(fd);
-        printf("Connected with a client\n");
-        fflush(stdout);
-        mainMenu(client);
-        exit(0);
-      }
-      close(client);
-    }
-  }
-  return 0;
+	while (1) {
+		
+		// clean finished child processes, avoiding zombies
+		// must use WNOHANG or would block whenever a child process was working
+		while (waitpid(-1, NULL, WNOHANG) > 0);
+		
+		// wait for new connection
+		client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size);
+		if (client > 0) {
+			createUsersFile();
+			
+			if (fork() == 0) {
+				close(fd);
+				printf("Connected with a client\n");
+				fflush(stdout);
+				mainMenu(client);
+				exit(0);
+			}
+			close(client);
+		}
+	}
+	return 0;
 }
 
 // COMMUNICATION
 
-void sendString(int client_fd, char *msg){
-  write(client_fd, msg, 1 + strlen(msg));
+void sendString(int client_fd, char *msg) {
+  	write(client_fd, msg, 1 + strlen(msg));
 }
 
-char *receiveString(int client_fd){
-  int nread = 0;
-  char buffer[BUF_SIZE];
-  char *string;
+char *receiveString(int client_fd) {
+	int nread = 0;
+	char buffer[BUF_SIZE];
+	char *string;
 
-  nread = read(client_fd, buffer, BUF_SIZE - 1);
-  buffer[nread] = '\0';
-  string = (char *)malloc(strlen(buffer) + 1);
-  strcpy(string, buffer);
-  fflush(stdout);
+	nread = read(client_fd, buffer, BUF_SIZE - 1);
+	buffer[nread] = '\0';
+	string = (char *)malloc(strlen(buffer) + 1);
+	strcpy(string, buffer);
+	fflush(stdout);
 
-  printf("Received from client %d: %s", getpid(), string);
+	printf("Received from client %d: %s", getpid(), string);
 
-  return string;
+	return string;
 }
 
-void mainMenu(int client_fd){
-  int selection = -1;
-  while(selection != 3){
-    sendString(client_fd, "\nWELCOME TO chatRC\n\n1. Sign Up\n2. Log in\n3. Exit\n\nSelection: ");
-    selection = atoi(receiveString(client_fd));
-    if (selection == 1 || selection == 2 || selection == 3){
-      if (selection == 1){
-        signupMenu(client_fd);
-        selection = -1;
-        continue;
-      }
-      if (selection == 2){
-        seeUsers();
-        loginMenu(client_fd);
-        selection = -1;
-        continue;
-      }
-      if (selection == 3){
-        sendString(client_fd, "\nUntil next time! Thanks for chattingRC with us :)\n");
-      }
-    }
-    else {
-      sendString(client_fd, "\nINVALID SELECTION, please press 1, 2 or 3! (Press ENTER to continue...)\n");
-      receiveString(client_fd);
-    }
-  }
+void mainMenu(int client_fd) {
+	int selection = -1;
+	while(selection != 3) {
+		sendString(client_fd, "\nWELCOME TO chatRC\n\n1. Sign Up\n2. Log in\n3. Exit\n\nSelection: ");
+		selection = atoi(receiveString(client_fd));
+		if (selection == 1 || selection == 2 || selection == 3) {
+			if (selection == 1) {
+				signupMenu(client_fd);
+				selection = -1;
+				continue;
+			}
+			if (selection == 2) {
+				seeUsers();
+				loginMenu(client_fd);
+				selection = -1;
+				continue;
+			}
+			if (selection == 3) {
+				sendString(client_fd, "\nUntil next time! Thanks for chattingRC with us :)\n");
+			}
+		}
+		else {
+			sendString(client_fd, "\nINVALID SELECTION, please press 1, 2 or 3! (Press ENTER to continue...)\n");
+			receiveString(client_fd);
+		}
+	}
 }
 
-void signupMenu(int client_fd){
-  bool leave_menu = false;
-  while(!leave_menu){
-    char username[50]; 
-    sendString(client_fd, "\nSign up for chatRC (Press ENTER to return)\n\nusername: ");
-    strcpy(username, receiveString(client_fd));
-    if (strcmp(username, "\n") != 0) {
-      if (checkDuplicateUsername(username)){
-        sendString(client_fd, "\nusername already exists (Press ENTER to continue...)\n");
-        receiveString(client_fd);
-      }
-      else{
-        char password[50]; 
-        sendString(client_fd, "password: ");
-        strcpy(password, receiveString(client_fd));
-        if (strcmp(password, "\n") == 0){
-          leave_menu = false;
-          break;
-        }
-        else{
-          create_user(username, password);
-          sendString(client_fd, "\nUser created successfully!!! (Press ENTER to continue...)\n");
-          receiveString(client_fd);
-          leave_menu = true;
-        }
-      }
-    }
-    else{
-      leave_menu = true;
-    }
-  }
+void signupMenu(int client_fd) {
+
+	bool leave_menu = false;
+	while(!leave_menu) {
+		char username[50]; 
+		sendString(client_fd, "\nSign up for chatRC (Press ENTER to return)\n\nusername: ");
+		strcpy(username, receiveString(client_fd));
+
+		if (strcmp(username, "\n") != 0) {
+			if (checkDuplicateUsername(username)) {
+				sendString(client_fd, "\nusername already exists (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+			}
+			else {
+				char password[50]; 
+				sendString(client_fd, "password: ");
+				strcpy(password, receiveString(client_fd));
+				
+				if (strcmp(password, "\n") == 0) {
+					leave_menu = false;
+					break;
+				}
+				else {
+					create_user(username, password);
+					sendString(client_fd, "\nUser created successfully!!! (Press ENTER to continue...)\n");
+					receiveString(client_fd);
+					leave_menu = true;
+				}
+			}
+		}
+		else {
+			leave_menu = true;
+		}
+  	}
 }
 
-void loginMenu(int client_fd){
-  bool leave_menu = false;
-  while(!leave_menu){
-    char username[50]; 
-    sendString(client_fd, "\nLog in chatRC (Press ENTER to return)\n\nusername: ");
-    strcpy(username, receiveString(client_fd));
-    if (strcmp(username, "\n") != 0) {
-      char password[50]; 
-      sendString(client_fd, "password: ");
-      strcpy(password, receiveString(client_fd));
-      if (strcmp(password, "\n") == 0){
-        leave_menu = true;
-      }
-      else{
-        int user_port = checkCredentials(username, password);
-        if(user_port != -1){
-          sendString(client_fd, "\nLogged in successfully!!! (Press ENTER to continue...)\n");
-          receiveString(client_fd);
-          User user;
-          strcpy(user.username, username);
-          strcpy(user.password, password);
-          user.port = user_port;
-          conversationsMenu(client_fd, user);
-          leave_menu = true;
-        }
-        else{
-          sendString(client_fd, "\nWrong username or password (Press ENTER to continue...)\n");
-          receiveString(client_fd);
-        }
-      }
-    }
-    else{ 
-     leave_menu = true;
-    }
-  }
+void loginMenu(int client_fd) {
+
+	bool leave_menu = false;
+	while(!leave_menu) {
+		char username[50]; 
+		sendString(client_fd, "\nLog in chatRC (Press ENTER to return)\n\nusername: ");
+		strcpy(username, receiveString(client_fd));
+
+		if (strcmp(username, "\n") != 0) {
+			char password[50]; 
+			sendString(client_fd, "password: ");
+			strcpy(password, receiveString(client_fd));
+
+			if (strcmp(password, "\n") == 0) {
+				leave_menu = true;
+			}
+			else {
+				int user_port = checkCredentials(username, password);
+				
+				if(user_port != -1) {
+					sendString(client_fd, "\nLogged in successfully!!! (Press ENTER to continue...)\n");
+					receiveString(client_fd);
+					User user;
+					strcpy(user.username, username);
+					strcpy(user.password, password);
+					user.port = user_port;
+					conversationsMenu(client_fd, user);
+					leave_menu = true;
+				}
+				else {
+					sendString(client_fd, "\nWrong username or password (Press ENTER to continue...)\n");
+					receiveString(client_fd);
+				}
+			}
+		}
+		else { 
+			leave_menu = true;
+		}
+  	}
 }
 
-void conversationsMenu(int client_fd, const User user){
-  int selection = -1;
-  while(selection != 3){
-    char string[100];
-    snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Log out\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
-    sendString(client_fd, string);
-    selection = atoi(receiveString(client_fd));
-    if (selection == 1 || selection == 2 || selection == 3){
-      if (selection == 1){
-        privateCommunicationMenu(client_fd, user);
-        selection = -1;
-      }
-      if (selection == 2){
-        sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-        receiveString(client_fd);
-        selection = -1;
-      }
-      if (selection == 3){
-        sendString(client_fd, "\nReturning to Main Menu! (Press ENTER to continue...)\n");
-        receiveString(client_fd);
-      }
-    }
-    else {
-      sendString(client_fd, "\nINVALID SELECTION, please press 1, 2 or 3! (Press ENTER to continue...)\n");
-      receiveString(client_fd);
-    }
-  }
+void conversationsMenu(int client_fd, const User user) {
+
+	int selection = -1;
+	while(selection != 3) {
+		char string[100];
+		snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Log out\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
+		sendString(client_fd, string);
+		selection = atoi(receiveString(client_fd));
+
+		if (selection == 1 || selection == 2 || selection == 3) {
+			if (selection == 1) {
+				privateCommunicationMenu(client_fd, user);
+				selection = -1;
+			}
+			if (selection == 2) {
+				sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+				selection = -1;
+			}
+			if (selection == 3) {
+				sendString(client_fd, "\nReturning to Main Menu! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+			}
+		}
+		else {
+			sendString(client_fd, "\nINVALID SELECTION, please press 1, 2 or 3! (Press ENTER to continue...)\n");
+			receiveString(client_fd);
+		}
+	}
 }
 
-void privateCommunicationMenu(int client_fd, const User user){
-  int selection = -1;
-  while(selection != 4){
-    char string[300];
-    snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE PRIVATE CONVERSATIONS MENU\n\n1. See ongoing conversations\n2. Start a new conversation\n3. Block users\n4. Exit Menu\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
-    sendString(client_fd, string);
-    selection = atoi(receiveString(client_fd));
-    if (selection == 1 || selection == 2 || selection == 3 || selection == 4){
-      if (selection == 1){ // Show ongoing conversations
-        sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-        receiveString(client_fd);
-        selection = -1;
-      }
-      if (selection == 2){ // Start a new conversation
-        User conversa = chooseAvailableUsers(client_fd, user);
-        if(strcmp(conversa.username, "") != 0 && strcmp(conversa.password, "") != 0){ // Se não retornar nulo
-          //Começa a conversa
-          startConversation(client_fd, user, conversa);
-        }
-        selection = -1;
-      }
-      if (selection == 3){ // Block users -> será que não faz mais sentido ser no conversations menu?
-        sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-        receiveString(client_fd);
-        selection = -1;
-      }
-      if (selection == 4){
-        sendString(client_fd, "\nReturning to Conversations Menu! (Press ENTER to continue...)\n");
-        receiveString(client_fd);
-      }
-    }
-    else {
-      sendString(client_fd, "\nINVALID SELECTION, please press 1, 2, 3 or! (Press ENTER to continue...)\n");
-      receiveString(client_fd);
-    }
-  }
+void privateCommunicationMenu(int client_fd, const User user) {
+	int selection = -1;
+	while(selection != 4) {
+		char string[300];
+		snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE PRIVATE CONVERSATIONS MENU\n\n1. See ongoing conversations\n2. Start a new conversation\n3. Block users\n4. Exit Menu\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
+		sendString(client_fd, string);
+		selection = atoi(receiveString(client_fd));
+
+		if (selection == 1 || selection == 2 || selection == 3 || selection == 4) {
+			if (selection == 1) { // Show ongoing conversations
+				sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+				selection = -1;
+			}
+			if (selection == 2) { // Start a new conversation
+				User conversa = chooseAvailableUsers(client_fd, user);
+				if(strcmp(conversa.username, "") != 0 && strcmp(conversa.password, "") != 0){ // Se não retornar nulo
+				//Começa a conversa
+				startConversation(client_fd, user, conversa);
+				}
+				selection = -1;
+			}
+			if (selection == 3) { // Block users -> será que não faz mais sentido ser no conversations menu?
+				sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+				selection = -1;
+			}
+			if (selection == 4) {
+				sendString(client_fd, "\nReturning to Conversations Menu! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+			}
+		}
+		else {
+			sendString(client_fd, "\nINVALID SELECTION, please press 1, 2, 3 or! (Press ENTER to continue...)\n");
+			receiveString(client_fd);
+		}
+  	}
 }
 
-User chooseAvailableUsers(int client_fd, const User user){
-  FILE *file = fopen("users.bin", "rb");
+User chooseAvailableUsers(int client_fd, const User user) {
+  	
+	FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         User nulo = { "", "", 0 };
         return nulo;
@@ -291,17 +308,17 @@ User chooseAvailableUsers(int client_fd, const User user){
     char counter_str[5];
 
   	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
-    for(size_t i = 0; i < num_users; i++){
+    for(size_t i = 0; i < num_users; i++) {
       // Check if the user is logged in
-      if(strcmp(users[i].username, user.username) != 0 /*&& user[i].logged_in && check if itself is not blocked by the user*/){ // If it isn't itself
-        available_users[counter] = users[i];
-        printf("available_users[counter] = %s", users[i].username);
-        counter++;
-        sprintf(counter_str, "%d", counter);
-        strcat(choices_to_send, counter_str);
-        strcat(choices_to_send, ". ");
-        strcat(choices_to_send, users[i].username);
-      }
+     	if(strcmp(users[i].username, user.username) != 0 /*&& user[i].logged_in && check if itself is not blocked by the user*/){ // If it isn't itself
+			available_users[counter] = users[i];
+			printf("available_users[counter] = %s", users[i].username);
+			counter++;
+			sprintf(counter_str, "%d", counter);
+			strcat(choices_to_send, counter_str);
+			strcat(choices_to_send, ". ");
+			strcat(choices_to_send, users[i].username);
+      	}
     }
 
     counter++;
@@ -312,26 +329,25 @@ User chooseAvailableUsers(int client_fd, const User user){
     // Send the string to the user
     // Receive the choice and return the user
     int selection = -1; 
-    while(1){
-      sendString(client_fd, choices_to_send);
-      selection = atoi(receiveString(client_fd));
+    while(1) {
+      	sendString(client_fd, choices_to_send);
+		selection = atoi(receiveString(client_fd));
 
-      if(selection == counter){ // Exit
-        User nulo = { "", "", 0 }; 
-        return nulo; // retorna um user nulo
-      }
-      else if(selection >= 0 && selection < counter){
-        return available_users[selection - 1];
-      }
+		if(selection == counter) { // Exit
+			User nulo = { "", "", 0 }; 
+			return nulo; // retorna um user nulo
+		}
+		else if(selection >= 0 && selection < counter) {
+			return available_users[selection - 1];
+		}
     }
 
     User nulo = { "", "", 0 };
     return nulo;
-
 }
 
-void startConversation(int client_fd, const User user, const User conversa){
-  printf("\nA conversa vai começar com entre %.*s e %.*s no porto %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, user.port);
+void startConversation(int client_fd, const User user, const User conversa) {
+   printf("\nA conversa vai começar com entre %.*s e %.*s no porto %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, user.port);
 }
 
 // FILES
@@ -404,7 +420,7 @@ bool checkDuplicateUsername(char *username) {
 // FICHEIROS
 
 void create_user(char *username, char *password){
-  FILE *file = fopen("users.bin", "ab+");
+   FILE *file = fopen("users.bin", "ab+");
 
     if (file == NULL) {
       erro("Opening file");
@@ -456,8 +472,7 @@ int checkCredentials(char *username, char *password) {
     return -1;
 }
 
-void erro(char *msg){
-  printf("Error: %s\n", msg);
-  exit(-1);
+void erro(char *msg) {
+	printf("Error: %s\n", msg);
+	exit(-1);
 }
-
