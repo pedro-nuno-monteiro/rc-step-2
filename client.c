@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
 		fflush(stdout);
 	}
 	sleep(3);
-	printf("\e[1;1H\e[2J"); 
+	printf("\e[1;1H\e[2J");
 	close(fd);
 	exit(0);
 }
@@ -49,7 +49,7 @@ int serverConnection(int argc, char *argv[]) {
 	struct sockaddr_in addr;
 	struct hostent *hostPtr;
 
-	if (argc != 3){
+	if (argc != 3) {
 		printf("client <host> <port>\n");
 		fflush(stdout);
 		exit(-1);
@@ -94,7 +94,7 @@ char *receiveString(int fd) {
 	string = (char *)malloc(strlen(buffer) + 1);
 	strcpy(string, buffer);
 
-	if(string[0]=='\n')
+	if(string[0] == '\n')
 		printf("\e[1;1H\e[2J");
 
 	printf("%s", string);
