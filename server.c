@@ -307,19 +307,19 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 
 	int selection = -1;
 
-	while(selection != 3) {
-		char string[100]; 
+	while(selection != 4) {
+		char string[200]; 
 		if (admin == false) {
-			snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Log out\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
+			snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Block users\n4. Log out\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
 		}
 		else {
-			snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Log out\n4. Filter Words\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
+			snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Block users\n4. Log out\n5. Filter Words\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
 		}
 		
 		sendString(client_fd, string);
 		selection = atoi(receiveString(client_fd));
 
-		if (selection == 1 || selection == 2 || selection == 3 || (selection == 4 && admin)) {
+		if (selection == 1 || selection == 2 || selection == 3 || selection == 4 || (selection == 5 && admin)) {
 			if (selection == 1) {
 				privateCommunicationMenu(client_fd, user);
 				selection = -1;
@@ -331,8 +331,6 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 			}
 			if (selection == 3) {
 				blockUsers(client_fd, user);
-				sendString(client_fd, "\nUser blocked!\nReturning to Main Menu! (Press ENTER to continue...)\n");
-				receiveString(client_fd);
 				selection = -1;
 			}
 			if (selection == 4) {
@@ -341,7 +339,7 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 				receiveString(client_fd);
 			}
 
-			if (selection == 4 && admin) {
+			if (selection == 5 && admin) {
 				filterWords(client_fd);
 				selection = -1;
 			}
@@ -508,6 +506,8 @@ void blockUsers(int client_fd, User user) {
 				already_blocked = false;
 			}
 			else {
+				sendString(client_fd, "\nUser blocked!\nReturning to Main Menu! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
 				break;
 			}
 		}
@@ -651,7 +651,6 @@ void filterWords(int client_fd) {
 			
 			if (selection == 1) {
 				seeWords(client_fd);
-				receiveString(client_fd);
 				selection = -1;
 			}
 
@@ -695,8 +694,17 @@ void seeWords(int client_fd) {
 
 	Word words[MAX_WORDS];
 	size_t num_words = fread(words, sizeof(Word), MAX_WORDS, file);
+
 	char menu_words_to_send[1000] = "";
 	strcat(menu_words_to_send, "\nWORDS\n\n");
+
+	if (num_words == 0) {
+		strcat(menu_words_to_send, "\nNo words in the file\n\nPress ENTER to continue... ");
+		sendString(client_fd, menu_words_to_send);
+		receiveString(client_fd);
+		fclose(file);
+		return;
+	}
 
 	int counter = 0;
 	char counter_str[5];
