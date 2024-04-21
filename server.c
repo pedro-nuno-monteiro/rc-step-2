@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <ctype.h>
 
-#define SERVER_PORT 9003
+#define SERVER_PORT 9999
 #define BUF_SIZE 1024
 #define MAX_USERS 50
 #define MAX_WORDS 50
@@ -32,6 +32,11 @@ typedef struct {
 	char word[20];
 } Word;
 
+typedef struct {
+    char blocker_username[20];
+	char bloqueado_username[20];
+} BlockedUser;
+
 void erro(char *msg);
 
 // COMMUNICATION
@@ -51,6 +56,8 @@ void startConversation(int client_fd, const User user, const User conversa);
 void getOnlineUsers(int client_fd, const User user);
 void updateUserStatus(const User user);
 void filterWords(int client_fd);
+void blockUsers(int client_fd, User user);
+bool notBlocked(User user, User user_lista);
 
 // FILES
 void createUsersFile();
@@ -61,6 +68,7 @@ void addWord (char *word);
 void deleteWord(int client_fd);
 bool checkDuplicateUsername(char *username);
 int checkCredentials(char *username, char *password);
+void createBlockUsersFile();
 
 int main() {
 	printf("\e[1;1H\e[2J");
@@ -83,6 +91,12 @@ int main() {
 
 	client_addr_size = sizeof(client_addr);
 
+	if (!firstConnection) {
+		setAllUsersLoggedOut();
+		printf("First log in\n");
+		firstConnection = true;
+    }
+
 	while (1) {
 		
 		// clean finished child processes, avoiding zombies
@@ -93,7 +107,8 @@ int main() {
 		client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size);
 		if (client > 0) {
 			createUsersFile();
-			
+			createBlockUsersFile();
+
 			if (fork() == 0) {
 				close(fd);
 				printf("Connected with a client\n");
@@ -110,7 +125,7 @@ int main() {
 // COMMUNICATION
 
 void sendString(int client_fd, char *msg) {
-  	write(client_fd, msg, 1 + strlen(msg));
+	write(client_fd, msg, 1 + strlen(msg));
 }
 
 char *receiveString(int client_fd) {
@@ -190,15 +205,10 @@ void signupMenu(int client_fd) {
 		else {
 			leave_menu = true;
 		}
-  	}
+	}
 }
 
 void loginMenu(int client_fd) {
-
-	if (!firstConnection) {
-        setAllUsersLoggedOut();
-        firstConnection = true;
-    }
 
 	bool leave_menu = false;
 	while(!leave_menu) {
@@ -320,6 +330,12 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 				selection = -1;
 			}
 			if (selection == 3) {
+				blockUsers(client_fd, user);
+				sendString(client_fd, "\nUser blocked!\nReturning to Main Menu! (Press ENTER to continue...)\n");
+				receiveString(client_fd);
+				selection = -1;
+			}
+			if (selection == 4) {
 				logoutUser(user);
 				sendString(client_fd, "\nReturning to Main Menu! (Press ENTER to continue...)\n");
 				receiveString(client_fd);
@@ -339,13 +355,13 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 
 void privateCommunicationMenu(int client_fd, const User user) {
 	int selection = -1;
-	while(selection != 5) {
+	while(selection != 4) {
 		char string[300];
-		snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE PRIVATE CONVERSATIONS MENU\n\n1. See ongoing conversations\n2. Start a new conversation\n3. Block users\n4. See who's online\n5. Exit Menu\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
+		snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE PRIVATE CONVERSATIONS MENU\n\n1. See ongoing conversations\n2. Start a new conversation\n3. See who's online\n4. Exit Menu\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
 		sendString(client_fd, string);
 		selection = atoi(receiveString(client_fd));
 
-		if (selection == 1 || selection == 2 || selection == 3 || selection == 4 || selection == 5) {
+		if (selection == 1 || selection == 2 || selection == 3 || selection == 4) {
 			if (selection == 1) { // Show ongoing conversations
 				sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
 				receiveString(client_fd);
@@ -360,16 +376,11 @@ void privateCommunicationMenu(int client_fd, const User user) {
 				}
 				selection = -1;
 			}
-			if (selection == 3) { // Block users -> será que não faz mais sentido ser no conversations menu?
-				sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-				receiveString(client_fd);
-				selection = -1;
-			}
-			if (selection == 4) {
+			if (selection == 3) {
 				getOnlineUsers(client_fd, user);
 				selection = -1;
 			}
-			if (selection == 5) {
+			if (selection == 4) {
 				sendString(client_fd, "\nReturning to Conversations Menu! (Press ENTER to continue...)\n");
 				receiveString(client_fd);
 			}
@@ -378,7 +389,146 @@ void privateCommunicationMenu(int client_fd, const User user) {
 			sendString(client_fd, "\nINVALID SELECTION, please press 1, 2, 3, 4 or 5 (Press ENTER to continue...)\n");
 			receiveString(client_fd);
 		}
-  	}
+	}
+}
+
+bool notBlocked(User user, User user_lista) {
+	FILE *file_2 = fopen("block_users.bin", "rb");
+    if (file_2 == NULL) {
+		printf("erro no file Blocked");
+    }
+
+	BlockedUser users_bloqueados[MAX_USERS];
+	size_t num_users_bloqueados = fread(users_bloqueados, sizeof(BlockedUser), MAX_USERS, file_2);
+
+    fclose(file_2);
+
+	for(size_t i = 0; i < num_users_bloqueados; i++) {
+		if(strcmp(users_bloqueados[i].blocker_username, user.username) == 0) {
+			if(strcmp(users_bloqueados[i].bloqueado_username, user_lista.username) == 0) {
+				return false;	// user está blocked
+			}
+		}
+	}
+	return true;
+}
+
+void blockUsers(int client_fd, User user) {
+
+	FILE *file = fopen("users.bin", "rb");
+    if (file == NULL) {
+        return;
+    }
+
+    User users[MAX_USERS];
+    User available_users[MAX_USERS];
+    size_t num_users = fread(users, sizeof(User), MAX_USERS, file);
+
+	FILE *file_2 = fopen("block_users.bin", "rb");
+    if (file_2 == NULL) {
+		return;
+    }
+
+	BlockedUser users_bloqueados[MAX_USERS];
+	BlockedUser users_que_o_user_logado_bloqueou[MAX_USERS];
+	size_t num_users_bloqueados = fread(users_bloqueados, sizeof(BlockedUser), MAX_USERS, file_2);
+
+    fclose(file);
+    fclose(file_2);
+
+	// ler todos os users que o user logado bloqueou
+	int counter_2 = 0;
+	for(size_t i = 0; i < num_users_bloqueados; i++) {
+		printf("blocker = %s", users_bloqueados[i].blocker_username);
+		printf("bloqued = %s", users_bloqueados[i].bloqueado_username);
+		if(strcmp(users_bloqueados[i].blocker_username, user.username) == 0) {
+			users_que_o_user_logado_bloqueou[counter_2] = users_bloqueados[i];
+			counter_2++;
+		}
+	}
+
+    char choices_to_send[1000] = "";
+    int counter = 0;
+    char counter_str[5];
+	strcat(choices_to_send, "\nLIST OF USERS\n\n");
+    for(size_t i = 0; i < num_users; i++) {
+     	if(strcmp(users[i].username, user.username) != 0) {
+			available_users[counter] = users[i];
+			printf("available_users[counter] = %s", users[i].username);
+			counter++;
+			sprintf(counter_str, "%d", counter);
+			strcat(choices_to_send, counter_str);
+			strcat(choices_to_send, ". ");
+
+			size_t username_len = strlen(users[i].username);
+			if (users[i].username[username_len - 1] == '\n') {
+				users[i].username[username_len - 1] = '\0';
+			}	
+			strcat(choices_to_send, users[i].username);
+			users[i].username[username_len - 1] = '\n';
+			for(size_t j = 0; j < counter_2; j++) {
+				if (strcmp(users[i].username, users_que_o_user_logado_bloqueou[j].bloqueado_username) == 0) {
+					strcat(choices_to_send, " | Blocked");
+					break;
+				}
+			}
+			strcat(choices_to_send, "\n");
+		}
+    }
+
+    counter++;
+    sprintf(counter_str, "%d", counter);
+    strcat(choices_to_send, counter_str);
+    strcat(choices_to_send, ". ");
+    strcat(choices_to_send, "Return to the previous menu\n\nSelection: ");
+
+    int selection = -1;
+	User user_a_bloquear;
+    while(1) {
+      	sendString(client_fd, choices_to_send);
+		selection = atoi(receiveString(client_fd));
+
+		if(selection == counter) {
+			return; 
+		}
+		else if(selection >= 0 && selection < counter) {
+			user_a_bloquear = available_users[selection - 1];
+			
+			bool already_blocked = false;
+			for(size_t j = 0; j < counter_2; j++) {
+				if (strcmp(user_a_bloquear.username, users_que_o_user_logado_bloqueou[j].bloqueado_username) == 0) {
+					already_blocked = true;
+					break;
+				}
+			}
+			if (already_blocked) {
+            	sendString(client_fd, "\nThis user is already blocked. Please select another user (press ENTER).\n\n");
+				receiveString(client_fd);
+				selection = -1;
+				already_blocked = false;
+			}
+			else {
+				break;
+			}
+		}
+	}
+
+	BlockedUser blockedUser;
+
+	strcpy(blockedUser.blocker_username, user.username);				// define quem bloqueia (o user logado)
+	strcpy(blockedUser.bloqueado_username, user_a_bloquear.username);	// define quem é bloqueado (o user escolhido)
+
+	FILE *file_3 = fopen("block_users.bin", "ab+");
+    if (file_3 == NULL) {
+		printf("erro no file");
+		return;
+    }
+
+	fwrite(&blockedUser, sizeof(BlockedUser), 1, file_3);
+	fclose(file_3);
+
+	return;
+
 }
 
 void getOnlineUsers(int client_fd, const User user) {
@@ -393,12 +543,12 @@ void getOnlineUsers(int client_fd, const User user) {
     fclose(file);
 
 	char choices_to_send[1000] = "";
-  	strcat(choices_to_send, "\nONLINE USERS\n\n");
+	strcat(choices_to_send, "\nONLINE USERS\n\n");
 	
 	int counter = 0;
 	char counter_str[5];
 	for(size_t i = 0; i < num_users; i++) {
-     	if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in) {
+		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in) {
 			users_online[counter] = users[i];
 			printf("users_online[counter] = %s", users[i].username);
 			counter++;
@@ -406,7 +556,7 @@ void getOnlineUsers(int client_fd, const User user) {
 			strcat(choices_to_send, counter_str);
 			strcat(choices_to_send, ". ");
 			strcat(choices_to_send, users[i].username);
-      	}
+		}
     }
 	
     counter++;
@@ -424,7 +574,7 @@ void getOnlineUsers(int client_fd, const User user) {
 }
 
 User chooseAvailableUsers(int client_fd, const User user) {
-  	
+	
 	FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         User nulo = { "", "", 0 };
@@ -441,10 +591,11 @@ User chooseAvailableUsers(int client_fd, const User user) {
     int counter = 0;
     char counter_str[5];
 
-  	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
+
+
+	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
     for(size_t i = 0; i < num_users; i++) {
-      // Check if the user is logged in
-     	if(strcmp(users[i].username, user.username) != 0 /*&& user[i].logged_in && check if itself is not blocked by the user*/){ // If it isn't itself
+     	if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i])) {
 			available_users[counter] = users[i];
 			printf("available_users[counter] = %s", users[i].username);
 			counter++;
@@ -452,7 +603,7 @@ User chooseAvailableUsers(int client_fd, const User user) {
 			strcat(choices_to_send, counter_str);
 			strcat(choices_to_send, ". ");
 			strcat(choices_to_send, users[i].username);
-      	}
+		}
     }
 
     counter++;
@@ -590,6 +741,27 @@ void createUsersFile() {
         fclose(file);
     }
 }
+
+void createBlockUsersFile() {
+	FILE *file = fopen("block_users.bin", "r");
+    if (file == NULL) {
+        file = fopen("block_users.bin", "wb");
+        if (file == NULL) {
+            perror("Error creating file");
+            exit(1);
+        }
+
+		BlockedUser user;
+		strcpy(user.blocker_username, "teste\n");
+		strcpy(user.bloqueado_username, "teste_2\n");
+
+		fwrite(&user, sizeof(BlockedUser), 1, file);
+        fclose(file);
+    } else {
+        fclose(file);
+    }
+}
+
 
 void seeUsers() {
     FILE *file = fopen("users.bin", "rb");
