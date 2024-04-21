@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <ctype.h>
 
-#define SERVER_PORT 9000
+#define SERVER_PORT 9999
 #define BUF_SIZE 1024
 #define MAX_USERS 50
 
@@ -74,6 +74,12 @@ int main() {
 
 	client_addr_size = sizeof(client_addr);
 
+	if (!firstConnection) {
+		setAllUsersLoggedOut();
+		printf("First log in\n");
+		firstConnection = true;
+    }
+
 	while (1) {
 		
 		// clean finished child processes, avoiding zombies
@@ -101,7 +107,7 @@ int main() {
 // COMMUNICATION
 
 void sendString(int client_fd, char *msg) {
-  	write(client_fd, msg, 1 + strlen(msg));
+	write(client_fd, msg, 1 + strlen(msg));
 }
 
 char *receiveString(int client_fd) {
@@ -181,15 +187,10 @@ void signupMenu(int client_fd) {
 		else {
 			leave_menu = true;
 		}
-  	}
+	}
 }
 
 void loginMenu(int client_fd) {
-
-	if (!firstConnection) {
-        setAllUsersLoggedOut();
-        firstConnection = true;
-    }
 
 	bool leave_menu = false;
 	while(!leave_menu) {
