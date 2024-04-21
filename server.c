@@ -50,15 +50,15 @@ User chooseAvailableUsers(int client_fd, const User user);
 void startConversation(int client_fd, const User user, const User conversa);
 void getOnlineUsers(int client_fd, const User user);
 void updateUserStatus(const User user);
-void filterwords(int client_fd);
+void filterWords(int client_fd);
 
 // FILES
 void createUsersFile();
 void seeUsers();
 void seeWords(int client_fd);
 void create_user(char *username, char *password);
-void add_word (char *word);
-void delete_word(int indice, int client_fd);
+void addWord (char *word);
+void deleteWord(int client_fd);
 bool checkDuplicateUsername(char *username);
 int checkCredentials(char *username, char *password);
 
@@ -297,10 +297,9 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 
 	int selection = -1;
 
-
 	while(selection != 3) {
 		char string[100]; 
-		if (admin == false){
+		if (admin == false) {
 			snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE CONVERSATIONS MENU\n1. Private\n2. Group\n3. Log out\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
 		}
 		else {
@@ -326,8 +325,8 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 				receiveString(client_fd);
 			}
 
-			if (selection == 4 && admin){
-				filterwords(client_fd);
+			if (selection == 4 && admin) {
+				filterWords(client_fd);
 				selection = -1;
 			}
 		}
@@ -486,44 +485,39 @@ void startConversation(int client_fd, const User user, const User conversa) {
    printf("\nA conversa vai começar com entre %.*s e %.*s no porto %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, user.port);
 }
 
-void filterwords(int client_fd){
-
+void filterWords(int client_fd) {
 
 	int selection = -1;
 	
-	while(selection != 4){
+	while(selection != 4) {
 		char string[100]; 
 		snprintf(string, sizeof(string), "\nWELCOME TO THE FILTER WORDS MENU\n1. See Words\n2. Add Word\n3. Delete Word\n4. Exit Menu\n\nSelection: ");
 
 		sendString(client_fd, string);
 		selection = atoi(receiveString(client_fd));
 
-		if (selection == 1 || selection == 2 || selection == 3 || selection == 4){
-
-			if (selection == 1){
+		if (selection == 1 || selection == 2 || selection == 3 || selection == 4) {
+			
+			if (selection == 1) {
 				seeWords(client_fd);
-				//sendString(client_fd, "\n(Press ENTER to continue...)\n");
 				receiveString(client_fd);
-				selection=-1;
+				selection = -1;
 			}
 
-			if (selection == 2){
+			if (selection == 2) {
 				char word_add[50]; 
 				sendString(client_fd, "\n(WORD TO ADD)\n\nWord: ");
 				strcpy(word_add, receiveString(client_fd));
-				add_word(word_add);
-				selection=-1;
+				addWord(word_add);
+				selection = -1;
 			}
 
-			if (selection == 3){
-				int indice;
-				sendString(client_fd, "\n(WORD TO DELETE)\n\nIndex: ");
-				indice = atoi(receiveString(client_fd));
-				delete_word(indice, client_fd);
-				selection=-1;
+			if (selection == 3) {
+				deleteWord(client_fd);
+				selection = -1;
 			}
 
-			if (selection == 4){
+			if (selection == 4) {
 				//sendString(client_fd, "\nReturning to Main Menu! (Press ENTER to continue...)\n");
 				//receiveString(client_fd);
 			}
@@ -541,9 +535,9 @@ void filterwords(int client_fd){
 
 // FILES
 
-void seeWords(int client_fd){
-	FILE *file = fopen("words.bin", "rb");
+void seeWords(int client_fd) {
 
+	FILE *file = fopen("words.bin", "rb");
 	if (file == NULL) {
         return;
     }
@@ -557,7 +551,6 @@ void seeWords(int client_fd){
 	char counter_str[5];
 
 	for (size_t i = 0; i < num_words; i++) {
-        // Remove trailing newline character if it exists
         size_t palavra = strlen(words[i].word);
 
         if (palavra > 0 && words[i].word[palavra - 1] == '\n') {
@@ -569,15 +562,11 @@ void seeWords(int client_fd){
 		strcat(menu_words_to_send, words[i].word);
 		strcat(menu_words_to_send, "\n");
 		counter++;
-
-        //printf("Word %ld -> %s\n", i, words[i].word);
     }
+
 	strcat(menu_words_to_send, "Press ENTER to continue...");
 	sendString(client_fd, menu_words_to_send);
     fclose(file);
-
-
-
 }
 
 void createUsersFile() {
@@ -649,9 +638,9 @@ bool checkDuplicateUsername(char *username) {
 
 // FICHEIROS
 
-void add_word (char *word){
+void addWord(char *word) {
+	
 	FILE *file = fopen("words.bin", "ab+");
-
 	if (file == NULL) {
         return;
     }
@@ -665,20 +654,43 @@ void add_word (char *word){
 	fclose(file);
 }
 
-void delete_word(int indice, int client_fd){
-	FILE *file = fopen("words.bin", "rb+");
+void deleteWord(int client_fd) {
 
+	FILE *file = fopen("words.bin", "rb+");
 	if (file == NULL) {
         return;
     }
 
+	int indice = 0;
+	char menu_words_to_send[1000] = "";
+	strcat(menu_words_to_send, "\n Word to Delete\n\n");
+
 	Word words[MAX_WORDS];
 	size_t num_words = fread(words, sizeof(Word), MAX_WORDS, file);
 
-	 if (num_words == 0) {
+	int counter = 0;
+	char counter_str[5];
+	for (size_t i = 0; i < num_words; i++) {
+        size_t palavra = strlen(words[i].word);
+
+        if (palavra > 0 && words[i].word[palavra - 1] == '\n') {
+            words[i].word[palavra - 1] = '\0';
+        }
+		sprintf(counter_str, "%d", counter);
+        strcat(menu_words_to_send, counter_str);
+		strcat(menu_words_to_send, ". ");
+		strcat(menu_words_to_send, words[i].word);
+		strcat(menu_words_to_send, "\n");
+		counter++;
+    }
+	strcat(menu_words_to_send, "Selecione: ");
+
+	sendString(client_fd, menu_words_to_send);
+	indice = atoi(receiveString(client_fd));
+	
+	if (num_words == 0) {
 		sendString(client_fd, "\nNão há palavras no ficheiro\n\nPress ENTER to continue... ");
 		receiveString(client_fd);
-
         fclose(file);
         return;
     }
@@ -689,21 +701,21 @@ void delete_word(int indice, int client_fd){
         fclose(file);
         return;
     }
-	
+
 	for (size_t i = indice; i < num_words - 1; ++i) {
         strcpy(words[i].word, words[i + 1].word);
     }
 	num_words--;
+
+	sendString(client_fd, "\n Word deleted \n\nPress ENTER to continue... ");
+	receiveString(client_fd);
 
 	fclose(file);
 
 	file = fopen("words.bin", "wb");
 	fwrite(words, sizeof(Word), num_words, file);
 	fclose(file);
-
 }
-
-
 
 void create_user(char *username, char *password){
 	FILE *file = fopen("users.bin", "ab+");
