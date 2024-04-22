@@ -725,6 +725,7 @@ void seeWords(int client_fd) {
 
 	strcat(menu_words_to_send, "Press ENTER to continue...");
 	sendString(client_fd, menu_words_to_send);
+	receiveString(client_fd);
     fclose(file);
 }
 
