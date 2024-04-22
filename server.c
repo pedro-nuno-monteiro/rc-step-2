@@ -37,8 +37,13 @@ typedef struct {
 	char bloqueado_username[20];
 } BlockedUser;
 
-void erro(char *msg);
+typedef struct {
+	char username1[20];
+	char username2[20];
+	int port;
+} Conversation;
 
+void erro(char *msg);
 // COMMUNICATION
 void sendString(int client_fd, char *msg);
 char *receiveString(int client_fd);
@@ -60,6 +65,7 @@ void blockUsers(int client_fd, User user);
 bool notBlocked(User user, User user_lista);
 
 // FILES
+// USERS FILE
 void createUsersFile();
 void seeUsers();
 void seeWords(int client_fd);
@@ -69,6 +75,12 @@ void deleteWord(int client_fd);
 bool checkDuplicateUsername(char *username);
 int checkCredentials(char *username, char *password);
 void createBlockUsersFile();
+// CONVERSATIONS FILE
+void createConversationsFileLog();
+void addConversation(const char *username1, const char *username2, int port);
+void deleteConversation(const char *username1, const char *username2);
+bool checkExistingConversation(const char *username1, const char *username2);
+User activeConversations(int client_fd, const User user);
 
 int main() {
 	printf("\e[1;1H\e[2J");
@@ -95,20 +107,16 @@ int main() {
 		setAllUsersLoggedOut();
 		printf("First log in\n");
 		firstConnection = true;
-    }
+	}
 
 	while (1) {
 		
-		// clean finished child processes, avoiding zombies
-		// must use WNOHANG or would block whenever a child process was working
-		while (waitpid(-1, NULL, WNOHANG) > 0);
-		
-		// wait for new connection
+		while (waitpid(-1, NULL, WNOHANG) > 0);		
 		client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size);
 		if (client > 0) {
 			createUsersFile();
 			createBlockUsersFile();
-
+			createConversationsFileLog();
 			if (fork() == 0) {
 				close(fd);
 				printf("Connected with a client\n");
@@ -230,13 +238,15 @@ void loginMenu(int client_fd) {
 				if(user_port != -1) {
 					sendString(client_fd, "\nLogged in successfully!!! (Press ENTER to continue...)\n");
 					receiveString(client_fd);
+					
 					User user;
 					strcpy(user.username, username);
 					strcpy(user.password, password);
 					user.port = user_port;
 					bool admin_or_not = false;
-					if(user.port == 9001){
-						admin_or_not =true;
+
+					if(user.port == 9001) {
+						admin_or_not = true;
 					}
 
 					user.logged_in = true;
@@ -253,7 +263,7 @@ void loginMenu(int client_fd) {
 		else { 
 			leave_menu = true;
 		}
-  	}
+	}
 }
 
 void setAllUsersLoggedOut() {
@@ -352,7 +362,9 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 }
 
 void privateCommunicationMenu(int client_fd, const User user) {
+
 	int selection = -1;
+	
 	while(selection != 4) {
 		char string[300];
 		snprintf(string, sizeof(string), "\nWELCOME %.*s TO THE PRIVATE CONVERSATIONS MENU\n\n1. See ongoing conversations\n2. Start a new conversation\n3. See who's online\n4. Exit Menu\n\nSelection: ", (int)(strlen(user.username) - 1), user.username);
@@ -360,17 +372,35 @@ void privateCommunicationMenu(int client_fd, const User user) {
 		selection = atoi(receiveString(client_fd));
 
 		if (selection == 1 || selection == 2 || selection == 3 || selection == 4) {
-			if (selection == 1) { // Show ongoing conversations
-				sendString(client_fd, "\nThis feature is currently under development. Stay tuned for updates! (Press ENTER to continue...)\n");
-				receiveString(client_fd);
+			if (selection == 1) {
+				//activeConversations
+				User conversa = activeConversations(client_fd, user);
+				if(strcmp(conversa.username, "") != 0){
+					char string[100];
+					snprintf(string, sizeof(string), "Start a conversation: %.*s -> %.*s %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, conversa.port);
+					sendString(client_fd, string);
+					receiveString(client_fd);
+				}
 				selection = -1;
 			}
 			if (selection == 2) { // Start a new conversation
 				User conversa = chooseAvailableUsers(client_fd, user);
 
 				if(strcmp(conversa.username, "") != 0 && strcmp(conversa.password, "") != 0) { // Se não retornar nulo
-					//Começa a conversa
-					startConversation(client_fd, user, conversa);
+					if(checkExistingConversation(user.username, conversa.username)){ 
+						char string[100];
+						snprintf(string, sizeof(string), "Start a conversation: %.*s -> %.*s %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, conversa.port);
+						sendString(client_fd, string);
+						receiveString(client_fd);
+					}
+					else {	// Create a new server on the client side
+						addConversation(user.username, conversa.username, user.port);
+						char string[100];
+						snprintf(string, sizeof(string), "Creating a new server: %.*s %d\n", (int)(strlen(user.username) - 1), user.username, user.port);
+						sendString(client_fd, string);
+						receiveString(client_fd);
+						deleteConversation(user.username, conversa.username);
+					}
 				}
 				selection = -1;
 			}
@@ -450,7 +480,7 @@ void blockUsers(int client_fd, User user) {
     char counter_str[5];
 	strcat(choices_to_send, "\nLIST OF USERS\n\n");
     for(size_t i = 0; i < num_users; i++) {
-     	if(strcmp(users[i].username, user.username) != 0) {
+		if(strcmp(users[i].username, user.username) != 0) {
 			available_users[counter] = users[i];
 			printf("available_users[counter] = %s", users[i].username);
 			counter++;
@@ -483,7 +513,7 @@ void blockUsers(int client_fd, User user) {
     int selection = -1;
 	User user_a_bloquear;
     while(1) {
-      	sendString(client_fd, choices_to_send);
+		sendString(client_fd, choices_to_send);
 		selection = atoi(receiveString(client_fd));
 
 		if(selection == counter) {
@@ -500,7 +530,7 @@ void blockUsers(int client_fd, User user) {
 				}
 			}
 			if (already_blocked) {
-            	sendString(client_fd, "\nThis user is already blocked. Please select another user (press ENTER).\n\n");
+				sendString(client_fd, "\nThis user is already blocked. Please select another user (press ENTER).\n\n");
 				receiveString(client_fd);
 				selection = -1;
 				already_blocked = false;
@@ -567,7 +597,7 @@ void getOnlineUsers(int client_fd, const User user) {
 
 	int selection = -1; 
     while(selection != counter) {
-      	sendString(client_fd, choices_to_send);
+		sendString(client_fd, choices_to_send);
 		selection = atoi(receiveString(client_fd));
     }
 	// faremos mais alguma coisa?
@@ -591,11 +621,9 @@ User chooseAvailableUsers(int client_fd, const User user) {
     int counter = 0;
     char counter_str[5];
 
-
-
 	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
     for(size_t i = 0; i < num_users; i++) {
-     	if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i])) {
+		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i])) {
 			available_users[counter] = users[i];
 			printf("available_users[counter] = %s", users[i].username);
 			counter++;
@@ -616,7 +644,7 @@ User chooseAvailableUsers(int client_fd, const User user) {
     // Receive the choice and return the user
     int selection = -1; 
     while(1) {
-      	sendString(client_fd, choices_to_send);
+		sendString(client_fd, choices_to_send);
 		selection = atoi(receiveString(client_fd));
 
 		if(selection == counter) { // Exit
@@ -630,10 +658,6 @@ User chooseAvailableUsers(int client_fd, const User user) {
 
     User nulo = { "", "", 0 };
     return nulo;
-}
-
-void startConversation(int client_fd, const User user, const User conversa) {
-   printf("\nA conversa vai começar com entre %.*s e %.*s no porto %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, user.port);
 }
 
 void filterWords(int client_fd) {
@@ -671,20 +695,16 @@ void filterWords(int client_fd) {
 				//sendString(client_fd, "\nReturning to Main Menu! (Press ENTER to continue...)\n");
 				//receiveString(client_fd);
 			}
-
-		
 		}
 
-		else{
+		else {
 			sendString(client_fd, "\nINVALID SELECTION, please press 1, 2 or 3! (Press ENTER to continue...)\n");
 			receiveString(client_fd);
 		}
 	}
 }
 
-
 // FILES
-
 void seeWords(int client_fd) {
 
 	FILE *file = fopen("words.bin", "rb");
@@ -939,8 +959,9 @@ int checkCredentials(char *username, char *password) {
 
     for (size_t i = 0; i < num_users; i++) {
         if (strcmp(users[i].username, username) == 0) {
-            if(strcmp(users[i].password, password) == 0){
-              return users[i].port;
+			
+            if(strcmp(users[i].password, password) == 0) {
+				return users[i].port;
             }
             fclose(file);
             return -1;
@@ -951,7 +972,183 @@ int checkCredentials(char *username, char *password) {
     return -1;
 }
 
-void erro(char *msg) {
+// CONVERSATIONS FILE
+
+void createConversationsFileLog() {
+    FILE *file = fopen("conversationsLog.bin", "r");
+    if (file == NULL) {
+        file = fopen("conversationsLog.bin", "wb");
+        if (file == NULL) {
+            perror("Error creating file");
+            exit(1);
+        }
+
+        fclose(file);
+    } else {
+        fclose(file);
+    }
+}
+
+void addConversation(const char *username1, const char *username2, int port) {
+    // Open the file in append mode
+    FILE *file = fopen("conversationsLog.bin", "ab");
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(1);
+    }
+
+    // Create a Conversa struct with the provided usernames
+    Conversation conversation;
+    strcpy(conversation.username1, username1);
+    strcpy(conversation.username2, username2);
+    conversation.port = port;
+
+    // Write the Conversa struct to the file
+    fwrite(&conversation, sizeof(Conversation), 1, file);
+
+    // Close the file
+    fclose(file);
+
+    printf("Conversation added successfully.\n");
+}
+
+void deleteConversation(const char *username1, const char *username2) {
+    // Open the file in read mode
+    FILE *file = fopen("conversationsLog.bin", "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(1);
+    }
+
+    // Open a temporary file to write the updated contents
+    FILE *tempFile = fopen("tempFile.bin", "wb");
+    if (tempFile == NULL) {
+        perror("Error creating temporary file");
+        fclose(file);
+        exit(1);
+    }
+
+    Conversation conversation;
+    bool deleted = false;
+    // Read conversations from the original file
+    while (fread(&conversation, sizeof(Conversation), 1, file) == 1) {
+        // Check if the conversation involves either of the specified usernames
+        if ((strcmp(conversation.username1, username1) == 0 && strcmp(conversation.username2, username2) == 0) ||
+            (strcmp(conversation.username1, username2) == 0 && strcmp(conversation.username2, username1) == 0)) {
+            deleted = true;
+        } else {
+            // Write the conversation to the temporary file
+            fwrite(&conversation, sizeof(Conversation), 1, tempFile);
+        }
+    }
+
+    // Close both files
+    fclose(file);
+    fclose(tempFile);
+
+    if (!deleted) {
+        printf("Conversation not found.\n");
+    } else {
+        printf("Conversation deleted successfully.\n");
+    }
+
+    // Remove the original file
+    remove("conversationsLog.bin");
+    // Rename the temporary file to the original file
+    rename("tempFile.bin", "conversationsLog.bin");
+}
+
+bool checkExistingConversation(const char *username1, const char *username2) {
+    // Open the file for reading
+    FILE *file = fopen("conversationsLog.bin", "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(1);
+    }
+
+    // Create a Conversa struct to read data from the file
+    Conversation conversation;
+
+    // Read Conversa structs from the file and compare usernames
+    while (fread(&conversation, sizeof(Conversation), 1, file) == 1) {
+        // Check if the conversation exists with the provided usernames
+        if ((strcmp(conversation.username1, username1) == 0 && strcmp(conversation.username2, username2) == 0) ||
+            (strcmp(conversation.username1, username2) == 0 && strcmp(conversation.username2, username1) == 0)) {
+            // Conversation found
+            fclose(file);
+            return true;
+        }
+    }
+
+    // Conversation not found
+    fclose(file);
+    return false;
+}
+
+User activeConversations(int client_fd, const User user) {
+    FILE *file = fopen("conversationsLog.bin", "rb");
+    if (file == NULL) {
+        User nulo = { "", "", 0 };
+        return nulo;
+    }
+
+    User available_users[MAX_USERS];
+    int counter = 0;
+    char choices_to_send[1000] = "\nACTIVE CONVERSATIONS\n\n";
+    char counter_str[5];
+
+    Conversation conversations[MAX_USERS - 1];
+    size_t num_conversations = fread(conversations, sizeof(Conversation), MAX_USERS - 1, file);
+
+    fclose(file);
+
+    for (size_t i = 0; i < num_conversations; i++) {
+        if (strcmp(conversations[i].username1, user.username) == 0) {
+            strcpy(available_users[counter].username, conversations[i].username2);
+            available_users[counter].port = conversations[i].port;
+            counter++;
+            sprintf(counter_str, "%d", counter);
+            strcat(choices_to_send, counter_str);
+            strcat(choices_to_send, ". ");
+            strcat(choices_to_send, conversations[i].username2);
+        } else if (strcmp(conversations[i].username2, user.username) == 0) {
+            strcpy(available_users[counter].username, conversations[i].username1);
+            available_users[counter].port = conversations[i].port;
+            counter++;
+            sprintf(counter_str, "%d", counter);
+            strcat(choices_to_send, counter_str);
+            strcat(choices_to_send, ". ");
+            strcat(choices_to_send, conversations[i].username1);
+        }
+    }
+
+    // Add an option to return to the PRIVATE CONVERSATIONS MENU
+    counter++;
+    sprintf(counter_str, "%d", counter);
+    strcat(choices_to_send, counter_str);
+    strcat(choices_to_send, ". ");
+    strcat(choices_to_send, "Return to the PRIVATE CONVERSATIONS MENU\n\nSelection: ");
+
+    // Send the string to the user
+    // Receive the choice and return the user
+    int selection = -1;
+    while (1) {
+        sendString(client_fd, choices_to_send);
+        selection = atoi(receiveString(client_fd));
+
+        if (selection == counter) { // Exit
+            User nulo = { "", "", 0 };
+            return nulo;
+        } else if (selection >= 0 && selection < counter) {
+			return available_users[selection - 1];
+        }
+    }
+
+    User nulo = { "", "", 0 };
+    return nulo;
+}
+
+void erro(char *msg) { 
 	printf("Error: %s\n", msg);
 	exit(-1);
 }
