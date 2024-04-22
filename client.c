@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <ctype.h>
 
+#include <netinet/tcp.h> // Para não dar problemas na função bind
+
 typedef int bool;
 #define true 1
 #define false 0
@@ -173,7 +175,6 @@ void connectingToClientServer(const User user, const User conversa){
       msgReceived = receiveString(fd);
 
       if(strcmp(msgReceived, "Disconnected\n")==0){ 
-        printf("Recebi aqui o disconnected\n");
         sendString(fd, "Disconnected\n");
         break;
       }
@@ -188,14 +189,30 @@ void createNewServer(const User user){
   int fd, client;
   struct sockaddr_in addr, client_addr;
   int client_addr_size;
-
+  
   bzero((void *)&addr, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
   addr.sin_port = htons(user.port);
 
-  if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    erro("na funcao socket");
+  int opt = 1;
+  do {
+      // Create socket
+      if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+          perror("na funcao socket");
+          sleep(2);
+          continue;
+      }
+
+      if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+          perror("setsockopt");
+          close(fd);
+          sleep(2);
+      } else {
+          break;
+      }
+  } while (1);
+
   if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     erro("na funcao bind");
   if (listen(fd, 5) < 0)
@@ -211,8 +228,6 @@ void createNewServer(const User user){
   if (client > 0){
       close(fd);
       printf("Connected with another user\n");
-      //sleep(1);
-      //printf("\e[1;1H\e[2J"); 
       fflush(stdout);
       // Menu da conversa
       User conversa;
@@ -244,11 +259,10 @@ void createNewServer(const User user){
         printf("%s: ", user.username);
         fgets(msgToSend, sizeof(msgToSend), stdin);
         if(strcmp(msgToSend, "\n")==0){ 
-          sendString(fd, "Disconnected\n");
+          sendString(client, "Disconnected\n");
           free(msgReceived);
           msgReceived = receiveString(client);
           if(strcmp(msgReceived, "Disconnected\n")==0){ 
-            printf("FOI AQUI\n");
             sleep(1);
             close(client);
             return;
