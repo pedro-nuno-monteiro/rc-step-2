@@ -24,7 +24,7 @@ bool firstConnection = false;
 typedef struct {
     char username[20];
     char password[20];
-    int port;
+    int port; // cada user tem um port associdado
 	bool logged_in;	// define se o user está logado ou não
 } User;
 
@@ -52,13 +52,13 @@ char *receiveString(int client_fd);
 void mainMenu(int client_fd);
 void signupMenu(int client_fd);
 void loginMenu(int client_fd);
-void setAllUsersLoggedOut();	//ao iniciair uma nova sessão, todos os users ficam logged out (impedir erros)
+void setAllUsersLoggedOut();	//ao iniciar uma nova sessão, todos os users ficam logged out (impedir erros)
 void logoutUser(User user);	//quando o user faz logout, o seu estado é alterado para logged out
 void conversationsMenu(int client_fd, const User user, bool admin);
 void privateCommunicationMenu(int client_fd, const User user);
 User chooseAvailableUsers(int client_fd, const User user);
-void startConversation(int client_fd, const User user, const User conversa);
 void getOnlineUsers(int client_fd, const User user);	//menu que retribui todos os users online
+
 void updateUserStatus(const User user);
 void filterWords(int client_fd);
 void blockUsers(int client_fd, User user); //func para bloquear users
@@ -331,7 +331,7 @@ void conversationsMenu(int client_fd, const User user, bool admin) {
 
 		if (selection == 1 || selection == 2 || selection == 3 || selection == 4 || (selection == 5 && admin)) {
 			if (selection == 1) {
-				privateCommunicationMenu(client_fd, user);
+				privateCommunicationMenu(client_fd, user); // Conversas Privadas
 				selection = -1;
 			}
 			if (selection == 2) {
@@ -372,34 +372,33 @@ void privateCommunicationMenu(int client_fd, const User user) {
 		selection = atoi(receiveString(client_fd));
 
 		if (selection == 1 || selection == 2 || selection == 3 || selection == 4) {
-			if (selection == 1) {
-				//activeConversations
+			if (selection == 1) { // mostra se algum user já começou uma conversa e está à espera da sua conexão
 				User conversa = activeConversations(client_fd, user);
-				if(strcmp(conversa.username, "") != 0){
+				if(strcmp(conversa.username, "") != 0){ 
 					char string[100];
 					snprintf(string, sizeof(string), "Start a conversation: %.*s -> %.*s %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, conversa.port);
-					sendString(client_fd, string);
+					sendString(client_fd, string); // envia ao cliente a informação para começar fazer a conexão com o user que já começou a conversa no porto dele
 					receiveString(client_fd);
 				}
 				selection = -1;
 			}
-			if (selection == 2) { // Start a new conversation
+			if (selection == 2) { // começa uma nova conversa ou conecta-se a uma já existente
 				User conversa = chooseAvailableUsers(client_fd, user);
 
 				if(strcmp(conversa.username, "") != 0 && strcmp(conversa.password, "") != 0) { // Se não retornar nulo
-					if(checkExistingConversation(user.username, conversa.username)){ 
+					if(checkExistingConversation(user.username, conversa.username)){  // se o server para a conversa já tiver sido criada pelo outro user, este apenas se conecta
 						char string[100];
 						snprintf(string, sizeof(string), "Start a conversation: %.*s -> %.*s %d\n", (int)(strlen(user.username) - 1), user.username, (int)(strlen(conversa.username) - 1), conversa.username, conversa.port);
 						sendString(client_fd, string);
 						receiveString(client_fd);
 					}
-					else {	// Create a new server on the client side
-						addConversation(user.username, conversa.username, user.port);
+					else { // se não existir a conversa ainda
+						addConversation(user.username, conversa.username, user.port); // cria a conversa no ficheiro binário para confirmação futura
 						char string[100];
-						snprintf(string, sizeof(string), "Creating a new server: %.*s %d\n", (int)(strlen(user.username) - 1), user.username, user.port);
+						snprintf(string, sizeof(string), "Creating a new server: %.*s %d\n", (int)(strlen(user.username) - 1), user.username, user.port); // envia a string para o cliente cria um server
 						sendString(client_fd, string);
 						receiveString(client_fd);
-						deleteConversation(user.username, conversa.username);
+						deleteConversation(user.username, conversa.username); // apaga a conversa do ficheiro
 					}
 				}
 				selection = -1;
@@ -603,7 +602,7 @@ void getOnlineUsers(int client_fd, const User user) {	//menu que retribui todos 
     }
 }
 
-User chooseAvailableUsers(int client_fd, const User user) {
+User chooseAvailableUsers(int client_fd, const User user) { // função/menu onde o utilizador escolhe com quem quer falar, dependendo de quem está online e se está bloqueado ou não
 	
 	FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
@@ -622,7 +621,7 @@ User chooseAvailableUsers(int client_fd, const User user) {
     char counter_str[5];
 
 	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
-    for(size_t i = 0; i < num_users; i++) { //apenas escolhe quem está online e não está bloqueado
+    for(size_t i = 0; i < num_users; i++) { // apenas escolhe quem está online e não está bloqueado
 		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i]) && notBlocked(users[i], user)) {
 			available_users[counter] = users[i];
 			printf("available_users[counter] = %s", users[i].username);
@@ -749,7 +748,7 @@ void seeWords(int client_fd) { //func para ver as palavras bloqueadas
     fclose(file);
 }
 
-void createUsersFile() {
+void createUsersFile() { // cria o ficheiro de users, com o user inicial admin, com password admin e porto 9001
     FILE *file = fopen("users.bin", "r");
     if (file == NULL) {
         file = fopen("users.bin", "wb");
@@ -771,7 +770,7 @@ void createUsersFile() {
     }
 }
 
-void createBlockUsersFile() {
+void createBlockUsersFile() { // cria o ficheiro de users bloqueados
 	FILE *file = fopen("block_users.bin", "r");
     if (file == NULL) {
         file = fopen("block_users.bin", "wb");
@@ -792,7 +791,7 @@ void createBlockUsersFile() {
 }
 
 
-void seeUsers() {
+void seeUsers() { // ver os users que existem, do lado do server (apenas para auxílio ao correr o código)
     FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         return;
@@ -817,7 +816,7 @@ void seeUsers() {
     fclose(file);
 }
 
-bool checkDuplicateUsername(char *username) {
+bool checkDuplicateUsername(char *username) { // confirma se já existe um user com aquele username para não haver iguais
     FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         return false;
@@ -948,7 +947,7 @@ void create_user(char *username, char *password) {
     fclose(file);
 }
 
-int checkCredentials(char *username, char *password) {
+int checkCredentials(char *username, char *password) { // confirma se as credencias que o user digitou são válidas no login
     FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         return false;
@@ -974,7 +973,7 @@ int checkCredentials(char *username, char *password) {
 
 // CONVERSATIONS FILE
 
-void createConversationsFileLog() {
+void createConversationsFileLog() { // cria o ficheira das conversas
     FILE *file = fopen("conversationsLog.bin", "r");
     if (file == NULL) {
         file = fopen("conversationsLog.bin", "wb");
@@ -989,39 +988,33 @@ void createConversationsFileLog() {
     }
 }
 
-void addConversation(const char *username1, const char *username2, int port) {
-    // Open the file in append mode
+void addConversation(const char *username1, const char *username2, int port) { // adiciona uma conversa -> dois users e o porto em qual está designada a conversa
     FILE *file = fopen("conversationsLog.bin", "ab");
     if (file == NULL) {
         perror("Error opening file");
         exit(1);
     }
 
-    // Create a Conversa struct with the provided usernames
     Conversation conversation;
     strcpy(conversation.username1, username1);
     strcpy(conversation.username2, username2);
     conversation.port = port;
 
-    // Write the Conversa struct to the file
     fwrite(&conversation, sizeof(Conversation), 1, file);
 
-    // Close the file
     fclose(file);
 
     printf("Conversation added successfully.\n");
 }
 
-void deleteConversation(const char *username1, const char *username2) {
-    // Open the file in read mode
+void deleteConversation(const char *username1, const char *username2) { // apaga a conversa assim que esta acaba
     FILE *file = fopen("conversationsLog.bin", "rb");
     if (file == NULL) {
         perror("Error opening file");
         exit(1);
     }
 
-    // Open a temporary file to write the updated contents
-    FILE *tempFile = fopen("tempFile.bin", "wb");
+    FILE *tempFile = fopen("tempFile.bin", "wb"); // ficheiro auxiliar para guardar a informação exceto a da conversa que vai ser apagada
     if (tempFile == NULL) {
         perror("Error creating temporary file");
         fclose(file);
@@ -1030,19 +1023,16 @@ void deleteConversation(const char *username1, const char *username2) {
 
     Conversation conversation;
     bool deleted = false;
-    // Read conversations from the original file
+
     while (fread(&conversation, sizeof(Conversation), 1, file) == 1) {
-        // Check if the conversation involves either of the specified usernames
         if ((strcmp(conversation.username1, username1) == 0 && strcmp(conversation.username2, username2) == 0) ||
             (strcmp(conversation.username1, username2) == 0 && strcmp(conversation.username2, username1) == 0)) {
             deleted = true;
         } else {
-            // Write the conversation to the temporary file
             fwrite(&conversation, sizeof(Conversation), 1, tempFile);
         }
     }
 
-    // Close both files
     fclose(file);
     fclose(tempFile);
 
@@ -1052,40 +1042,32 @@ void deleteConversation(const char *username1, const char *username2) {
         printf("Conversation deleted successfully.\n");
     }
 
-    // Remove the original file
-    remove("conversationsLog.bin");
-    // Rename the temporary file to the original file
-    rename("tempFile.bin", "conversationsLog.bin");
+    remove("conversationsLog.bin"); // apaga-se o ficheiro inicial
+    rename("tempFile.bin", "conversationsLog.bin"); // muda-se o nome do ficheiro auxiliar para o nome antigo
 }
 
-bool checkExistingConversation(const char *username1, const char *username2) {
-    // Open the file for reading
+bool checkExistingConversation(const char *username1, const char *username2) { // confirma se existe uma conversa que já começou
     FILE *file = fopen("conversationsLog.bin", "rb");
     if (file == NULL) {
         perror("Error opening file");
         exit(1);
     }
 
-    // Create a Conversa struct to read data from the file
     Conversation conversation;
 
-    // Read Conversa structs from the file and compare usernames
     while (fread(&conversation, sizeof(Conversation), 1, file) == 1) {
-        // Check if the conversation exists with the provided usernames
         if ((strcmp(conversation.username1, username1) == 0 && strcmp(conversation.username2, username2) == 0) ||
             (strcmp(conversation.username1, username2) == 0 && strcmp(conversation.username2, username1) == 0)) {
-            // Conversation found
             fclose(file);
             return true;
         }
     }
 
-    // Conversation not found
     fclose(file);
     return false;
 }
 
-User activeConversations(int client_fd, const User user) {
+User activeConversations(int client_fd, const User user) { // retorna as pessoas que estão à espera de uma conexão deste user
     FILE *file = fopen("conversationsLog.bin", "rb");
     if (file == NULL) {
         User nulo = { "", "", 0 };
@@ -1122,21 +1104,18 @@ User activeConversations(int client_fd, const User user) {
         }
     }
 
-    // Add an option to return to the PRIVATE CONVERSATIONS MENU
     counter++;
     sprintf(counter_str, "%d", counter);
     strcat(choices_to_send, counter_str);
     strcat(choices_to_send, ". ");
     strcat(choices_to_send, "Return to the PRIVATE CONVERSATIONS MENU\n\nSelection: ");
 
-    // Send the string to the user
-    // Receive the choice and return the user
     int selection = -1;
     while (1) {
         sendString(client_fd, choices_to_send);
         selection = atoi(receiveString(client_fd));
 
-        if (selection == counter) { // Exit
+        if (selection == counter) { // Sair
             User nulo = { "", "", 0 };
             return nulo;
         } else if (selection >= 0 && selection < counter) {

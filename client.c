@@ -24,8 +24,8 @@ typedef struct {
 
 void erro(char *msg);
 int serverConnection(int argc, char *argv[]);
-void connectingToClientServer(const User user, const User conversa);
-void createNewServer(const User user);
+void connectingToClientServer(const User user, const User conversa); // conecta-se a um server de um cliente
+void createNewServer(const User user); // torna o cliente num server
 void sendString(int fd, char *msg);
 char *receiveString(int fd);
 
@@ -42,14 +42,13 @@ int main(int argc, char *argv[]) {
     free(msgReceived);
     msgReceived = receiveString(fd);
     
-    // Make the client a server
     User user;
     const char* compareString = "Creating a new server:";
     size_t compareLength = strlen(compareString);
     if(strncmp(msgReceived, compareString, compareLength) == 0) {
 		sleep(2);	
 		printf("\e[1;1H\e[2J"); 
-		if (sscanf(msgReceived, "Creating a new server: %s %d", user.username, &user.port) == 2){
+		if (sscanf(msgReceived, "Creating a new server: %s %d", user.username, &user.port) == 2){ // recebe a string do server que diz para se tornar num server e ficar à espera de uma cliente
 			printf("username: %s\n", user.username);
 			createNewServer(user);
 
@@ -61,7 +60,7 @@ int main(int argc, char *argv[]) {
     const char* compareString2 = "Start a conversation:";
     size_t compareLength2 = strlen(compareString2);
 
-    if(strncmp(msgReceived, compareString2, compareLength2) == 0) {
+    if(strncmp(msgReceived, compareString2, compareLength2) == 0) { // recebe a string do server que diz para se conectar a um outro cliente
 		printf("\n\nConnecting with another user\n");
 		sleep(2);
 		printf("\e[1;1H\e[2J");
@@ -75,7 +74,7 @@ int main(int argc, char *argv[]) {
 		}
     }
     
-    if(strcmp(msgReceived, "\nUntil next time! Thanks for chattingRC with us :)\n") == 0)
+    if(strcmp(msgReceived, "\nUntil next time! Thanks for chattingRC with us :)\n") == 0) // sai do programa
 		break;
     
     fgets(msgToSend, sizeof(msgToSend), stdin);
@@ -124,7 +123,7 @@ int serverConnection(int argc, char *argv[]) {
 	return fd;
 }
 
-void connectingToClientServer(const User user, const User conversa) {
+void connectingToClientServer(const User user, const User conversa) { // conecta-se ao outro cliente para conversas
 
 	int fd;
 	struct sockaddr_in addr;
@@ -135,7 +134,7 @@ void connectingToClientServer(const User user, const User conversa) {
 	bzero((void *)&addr, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = ((struct in_addr *)(hostPtr->h_addr))->s_addr;
-	addr.sin_port = htons(conversa.port);
+	addr.sin_port = htons(conversa.port); // conversa no porto do outro user
 
 	bool connection_success = true;
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -157,7 +156,7 @@ void connectingToClientServer(const User user, const User conversa) {
 		
 		char *msgReceived = NULL;
 		char msgToSend[BUF_SIZE-22];
-		while(1) {
+		while(1) { // envia e recebe mensagens até alguém pressionar ENTER
 			printf("%s: ", user.username);
 			fgets(msgToSend, sizeof(msgToSend), stdin);
 			
@@ -183,7 +182,7 @@ void connectingToClientServer(const User user, const User conversa) {
 	}
 }
 
-void createNewServer(const User user) {
+void createNewServer(const User user) { // torna o client num server à espera de uma conexão
 
 	int fd, client;
 	struct sockaddr_in addr, client_addr;
@@ -192,24 +191,25 @@ void createNewServer(const User user) {
 	bzero((void *)&addr, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(user.port);
+	addr.sin_port = htons(user.port); // cria o server no port designado do user
 
 	int opt = 1;
-	do {
-		// Create socket
-		if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	do { // loop para confirmar se o socket já está pronto a usar outra vez, devido aos erros da função bind
+		// cria o socket
+		if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) { // se der erro vai tentar outra vez
 			perror("na funcao socket");
 			sleep(2);
 			continue;
 		}
 
-		if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+		if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) { // se der erro vai tentar outra vez
 			perror("setsockopt");
 			close(fd);
 			sleep(2);
 		} else {
 			break;
 		}
+
 	} while (1);
 
 	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
@@ -221,7 +221,7 @@ void createNewServer(const User user) {
 
 	while (waitpid(-1, NULL, WNOHANG) > 0);
 
-	client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size);
+	client = accept(fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_size); // fica à espera da conexão do cliente
 	if (client > 0) {
 		close(fd);
 		printf("Connected with another user\n");
@@ -244,11 +244,12 @@ void createNewServer(const User user) {
 		char *msgReceived = NULL;
 		char msgToSend[BUF_SIZE-22];
 
-		while(1) {
+		// Começa a conversa
+		while(1) { // envia e recebe mensagens até alguém pressionar ENTER
 			free(msgReceived);
 			msgReceived = receiveString(client);
 
-			if(strcmp(msgReceived, "Disconnected\n")==0) {
+			if(strcmp(msgReceived, "Disconnected\n")==0) { // o user desconectou-se então termina a conversa
 				sleep(1); 
 				close(client);
 				return;
@@ -257,7 +258,7 @@ void createNewServer(const User user) {
 			printf("%s: ", user.username);
 			fgets(msgToSend, sizeof(msgToSend), stdin);
 
-			if(strcmp(msgToSend, "\n") == 0) { 
+			if(strcmp(msgToSend, "\n") == 0) { // sai do programa mas garante que o user que se conectou saiu primeiro por causa de erros na função bind
 				sendString(client, "Disconnected\n");
 				free(msgReceived);
 				msgReceived = receiveString(client);
