@@ -25,19 +25,19 @@ typedef struct {
     char username[20];
     char password[20];
     int port;
-	bool logged_in;
+	bool logged_in;	// define se o user está logado ou não
 } User;
 
-typedef struct {
+typedef struct {	// struct que armazena as palavras bloqueadas pelo administrador
 	char word[20];
 } Word;
 
-typedef struct {
+typedef struct {	//struct que armazena os users bloqueados (quem bloqueia e quem é bloqueado)
     char blocker_username[20];
 	char bloqueado_username[20];
 } BlockedUser;
 
-typedef struct {
+typedef struct {	//struct que define uma conversa
 	char username1[20];
 	char username2[20];
 	int port;
@@ -52,17 +52,17 @@ char *receiveString(int client_fd);
 void mainMenu(int client_fd);
 void signupMenu(int client_fd);
 void loginMenu(int client_fd);
-void setAllUsersLoggedOut();
-void logoutUser(User user);
+void setAllUsersLoggedOut();	//ao iniciair uma nova sessão, todos os users ficam logged out (impedir erros)
+void logoutUser(User user);	//quando o user faz logout, o seu estado é alterado para logged out
 void conversationsMenu(int client_fd, const User user, bool admin);
 void privateCommunicationMenu(int client_fd, const User user);
 User chooseAvailableUsers(int client_fd, const User user);
 void startConversation(int client_fd, const User user, const User conversa);
-void getOnlineUsers(int client_fd, const User user);
+void getOnlineUsers(int client_fd, const User user);	//menu que retribui todos os users online
 void updateUserStatus(const User user);
 void filterWords(int client_fd);
-void blockUsers(int client_fd, User user);
-bool notBlocked(User user, User user_lista);
+void blockUsers(int client_fd, User user); //func para bloquear users
+bool notBlocked(User user, User user_lista); //função que retorna se o user está ou não bloqueado
 
 // FILES
 // USERS FILE
@@ -70,8 +70,8 @@ void createUsersFile();
 void seeUsers();
 void seeWords(int client_fd);
 void create_user(char *username, char *password);
-void addWord (char *word);
-void deleteWord(int client_fd);
+void addWord (char *word);	//func para adicionar uma palavra bloqueada
+void deleteWord(int client_fd); //func para eliminar uma palavra bloqueada
 bool checkDuplicateUsername(char *username);
 int checkCredentials(char *username, char *password);
 void createBlockUsersFile();
@@ -245,11 +245,11 @@ void loginMenu(int client_fd) {
 					user.port = user_port;
 					bool admin_or_not = false;
 
-					if(user.port == 9001) {
+					if(user.port == 9001) {	//define o user com username admin = admin
 						admin_or_not = true;
 					}
 
-					user.logged_in = true;
+					user.logged_in = true; //quando se dá login fica-se com status ONLINE
 					updateUserStatus(user);
 					conversationsMenu(client_fd, user, admin_or_not);
 					leave_menu = true;
@@ -290,7 +290,7 @@ void logoutUser(User user) {
     updateUserStatus(user);
 }
 
-void updateUserStatus(const User user) {
+void updateUserStatus(const User user) {	//função que atualiza o status do user (logged in ou logged out) no ficheiro users.bin
 
 	FILE *file = fopen("users.bin", "r+b");
     if (file == NULL) {
@@ -420,7 +420,7 @@ void privateCommunicationMenu(int client_fd, const User user) {
 	}
 }
 
-bool notBlocked(User user, User user_lista) {
+bool notBlocked(User user, User user_lista) {	//função que retorna se o user está ou não bloqueado
 	FILE *file_2 = fopen("block_users.bin", "rb");
     if (file_2 == NULL) {
 		printf("erro no file Blocked");
@@ -432,8 +432,8 @@ bool notBlocked(User user, User user_lista) {
     fclose(file_2);
 
 	for(size_t i = 0; i < num_users_bloqueados; i++) {
-		if(strcmp(users_bloqueados[i].blocker_username, user.username) == 0) {
-			if(strcmp(users_bloqueados[i].bloqueado_username, user_lista.username) == 0) {
+		if(strcmp(users_bloqueados[i].blocker_username, user.username) == 0) { //vê quem o user logado bloqueou
+			if(strcmp(users_bloqueados[i].bloqueado_username, user_lista.username) == 0) { //vê quem está bloqueado
 				return false;	// user está blocked
 			}
 		}
@@ -441,7 +441,7 @@ bool notBlocked(User user, User user_lista) {
 	return true;
 }
 
-void blockUsers(int client_fd, User user) {
+void blockUsers(int client_fd, User user) { //func para bloquear users
 
 	FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
@@ -470,11 +470,12 @@ void blockUsers(int client_fd, User user) {
 		printf("blocker = %s", users_bloqueados[i].blocker_username);
 		printf("bloqued = %s", users_bloqueados[i].bloqueado_username);
 		if(strcmp(users_bloqueados[i].blocker_username, user.username) == 0) {
-			users_que_o_user_logado_bloqueou[counter_2] = users_bloqueados[i];
+			users_que_o_user_logado_bloqueou[counter_2] = users_bloqueados[i]; // todos os users bloqueados pelo user logado
 			counter_2++;
 		}
 	}
 
+	// escolher quem bloquear
     char choices_to_send[1000] = "";
     int counter = 0;
     char counter_str[5];
@@ -496,7 +497,7 @@ void blockUsers(int client_fd, User user) {
 			users[i].username[username_len - 1] = '\n';
 			for(size_t j = 0; j < counter_2; j++) {
 				if (strcmp(users[i].username, users_que_o_user_logado_bloqueou[j].bloqueado_username) == 0) {
-					strcat(choices_to_send, " | Blocked");
+					strcat(choices_to_send, " | Blocked");	//info para o user saber quem já bloqueou
 					break;
 				}
 			}
@@ -520,9 +521,9 @@ void blockUsers(int client_fd, User user) {
 			return; 
 		}
 		else if(selection >= 0 && selection < counter) {
-			user_a_bloquear = available_users[selection - 1];
+			user_a_bloquear = available_users[selection - 1]; //devolve o user escolhido
 			
-			bool already_blocked = false;
+			bool already_blocked = false;	//para impedir que se bloqueie quem já foi bloqueado
 			for(size_t j = 0; j < counter_2; j++) {
 				if (strcmp(user_a_bloquear.username, users_que_o_user_logado_bloqueou[j].bloqueado_username) == 0) {
 					already_blocked = true;
@@ -548,7 +549,7 @@ void blockUsers(int client_fd, User user) {
 	strcpy(blockedUser.blocker_username, user.username);				// define quem bloqueia (o user logado)
 	strcpy(blockedUser.bloqueado_username, user_a_bloquear.username);	// define quem é bloqueado (o user escolhido)
 
-	FILE *file_3 = fopen("block_users.bin", "ab+");
+	FILE *file_3 = fopen("block_users.bin", "ab+");	//atualiza
     if (file_3 == NULL) {
 		printf("erro no file");
 		return;
@@ -561,7 +562,7 @@ void blockUsers(int client_fd, User user) {
 
 }
 
-void getOnlineUsers(int client_fd, const User user) {
+void getOnlineUsers(int client_fd, const User user) {	//menu que retribui todos os users online
 	FILE *file = fopen("users.bin", "rb");
     if (file == NULL) {
         return;
@@ -578,7 +579,7 @@ void getOnlineUsers(int client_fd, const User user) {
 	int counter = 0;
 	char counter_str[5];
 	for(size_t i = 0; i < num_users; i++) {
-		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in) {
+		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in) { //se o user não for o user logado e estiver online
 			users_online[counter] = users[i];
 			printf("users_online[counter] = %s", users[i].username);
 			counter++;
@@ -600,7 +601,6 @@ void getOnlineUsers(int client_fd, const User user) {
 		sendString(client_fd, choices_to_send);
 		selection = atoi(receiveString(client_fd));
     }
-	// faremos mais alguma coisa?
 }
 
 User chooseAvailableUsers(int client_fd, const User user) {
@@ -622,7 +622,7 @@ User chooseAvailableUsers(int client_fd, const User user) {
     char counter_str[5];
 
 	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
-    for(size_t i = 0; i < num_users; i++) {
+    for(size_t i = 0; i < num_users; i++) { //apenas escolhe quem está online e não está bloqueado
 		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i]) && notBlocked(users[i], user)) {
 			available_users[counter] = users[i];
 			printf("available_users[counter] = %s", users[i].username);
@@ -660,7 +660,7 @@ User chooseAvailableUsers(int client_fd, const User user) {
     return nulo;
 }
 
-void filterWords(int client_fd) {
+void filterWords(int client_fd) { //menu para filtrar palavras
 
 	int selection = -1;
 	
@@ -705,7 +705,7 @@ void filterWords(int client_fd) {
 }
 
 // FILES
-void seeWords(int client_fd) {
+void seeWords(int client_fd) { //func para ver as palavras bloqueadas
 
 	FILE *file = fopen("words.bin", "rb");
 	if (file == NULL) {
@@ -839,7 +839,7 @@ bool checkDuplicateUsername(char *username) {
 
 // FICHEIROS
 
-void addWord(char *word) {
+void addWord(char *word) { //func para adicionar uma palavra bloqueada
 	
 	FILE *file = fopen("words.bin", "ab+");
 	if (file == NULL) {
@@ -855,7 +855,7 @@ void addWord(char *word) {
 	fclose(file);
 }
 
-void deleteWord(int client_fd) {
+void deleteWord(int client_fd) { //func para eliminar uma palavra bloqueada
 
 	FILE *file = fopen("words.bin", "rb+");
 	if (file == NULL) {
@@ -918,7 +918,7 @@ void deleteWord(int client_fd) {
 	fclose(file);
 }
 
-void create_user(char *username, char *password){
+void create_user(char *username, char *password) {
 	FILE *file = fopen("users.bin", "ab+");
 
     if (file == NULL) {
