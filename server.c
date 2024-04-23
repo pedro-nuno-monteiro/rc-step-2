@@ -623,7 +623,7 @@ User chooseAvailableUsers(int client_fd, const User user) {
 
 	strcat(choices_to_send, "\nSTART A NEW CONVERSATION\n\n");
     for(size_t i = 0; i < num_users; i++) {
-		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i])) {
+		if(strcmp(users[i].username, user.username) != 0 && users[i].logged_in && notBlocked(user, users[i]) && notBlocked(users[i], user)) {
 			available_users[counter] = users[i];
 			printf("available_users[counter] = %s", users[i].username);
 			counter++;
